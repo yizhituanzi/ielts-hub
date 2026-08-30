@@ -710,8 +710,7 @@ const Reading = {
           <span class="num-badge" style="margin-left:4px">№ ${String(q.group.id).padStart(3, '0')}</span>
         </div>
         ${questionHtml}
-        <div style="margin-top:24px;display:flex;justify-content:space-between;align-items:center">
-          <button class="btn-ghost" onclick="Reading.synTestSkip()">跳过</button>
+        <div style="margin-top:24px;display:flex;justify-content:flex-end;align-items:center">
           ${q.type === 0 && q.filledBlanks.length > 0 ? '<button class="btn btn-primary" id="syn-chain-confirm" style="display:none" onclick="Reading.confirmChainFill()">确认</button>' : ''}
           <button class="btn-ghost" onclick="Reading.synTestQuit()">放弃</button>
         </div>
