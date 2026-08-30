@@ -756,7 +756,6 @@ const Reading = {
   confirmChainFill() {
     const q = this.synTestQuestions[this.synTestIdx];
     if (q.type !== 0 || q.answered) return;
-    q.answered = true;
     // Check each blank — blankWords are the correct answers in order of blankIndices
     let allCorrect = true;
     for (let bi = 0; bi < q.blankIndices.length; bi++) {
@@ -767,31 +766,45 @@ const Reading = {
         allCorrect = false;
       }
     }
-    q.correct = allCorrect;
-
-    // Visual feedback
-    Utils.$$('.syn-blank-slot').forEach(el => {
-      const idx = parseInt(el.dataset.idx);
-      const bi = q.blankIndices.indexOf(idx);
-      const filled = q.filledBlanks[idx];
-      const correctWord = q.blankWords[bi];
-      if (filled === correctWord) {
-        el.style.borderColor = 'var(--dot-done)';
-        el.style.color = 'var(--dot-done)';
-      } else {
-        el.style.borderColor = 'var(--dot-key)';
-        el.style.color = 'var(--dot-key)';
-      }
-    });
-    Utils.$$('.syn-option').forEach(el => { el.style.pointerEvents = 'none'; });
 
     if (allCorrect) {
-      this.synTestScore.correct++;
+      q.answered = true;
+      q.correct = true;
+      if (!q.wrongOnce) this.synTestScore.correct++;
+      else this.synTestScore.correct++;
+      Utils.$$('.syn-blank-slot').forEach(el => {
+        el.style.borderColor = 'var(--dot-done)';
+        el.style.color = 'var(--dot-done)';
+      });
+      Utils.$$('.syn-option').forEach(el => { el.style.pointerEvents = 'none'; });
+      setTimeout(() => this.synTestNext(), 1200);
     } else {
-      this.synTestScore.wrong++;
-      this.synTestScore.wrongGroups.push(q.group);
+      if (!q.wrongOnce) {
+        q.wrongOnce = true;
+        this.synTestScore.wrong++;
+        this.synTestScore.wrongGroups.push(q.group);
+      }
+      // Show wrong feedback briefly then reset for retry
+      Utils.$$('.syn-blank-slot').forEach(el => {
+        const idx = parseInt(el.dataset.idx);
+        const bi = q.blankIndices.indexOf(idx);
+        const filled = q.filledBlanks[idx];
+        const correctWord = q.blankWords[bi];
+        if (filled !== correctWord) {
+          el.style.borderColor = 'var(--dot-key)';
+          el.style.color = 'var(--dot-key)';
+        } else {
+          el.style.borderColor = 'var(--dot-done)';
+          el.style.color = 'var(--dot-done)';
+        }
+      });
+      Utils.$$('.syn-option').forEach(el => { el.style.pointerEvents = 'none'; });
+      setTimeout(() => {
+        q.filledBlanks = [];
+        q.blanksRemaining = [...q.blankWords];
+        this.renderView();
+      }, 1500);
     }
-    setTimeout(() => this.synTestNext(), 1500);
   },
 
   // Pair matching interaction
@@ -831,65 +844,108 @@ const Reading = {
   confirmPairMatch() {
     const q = this.synTestQuestions[this.synTestIdx];
     if (q.type !== 3 || q.answered) return;
-    q.answered = true;
     let allCorrect = true;
     for (const group of q.allFour) {
       const matched = q.matches[group.core];
       const isCorrect = group.chain.some(item => item.w === matched);
       if (!isCorrect) allCorrect = false;
-      // Visual
-      Utils.$$('.syn-pair-left').forEach(el => {
-        if (el.dataset.word === group.core) {
-          el.style.borderColor = isCorrect ? 'var(--dot-done)' : 'var(--dot-key)';
-        }
-      });
-      Utils.$$('.syn-pair-right').forEach(el => {
-        if (el.dataset.word === matched) {
-          el.style.borderColor = isCorrect ? 'var(--dot-done)' : 'var(--dot-key)';
-        }
-      });
     }
-    q.correct = allCorrect;
+
     if (allCorrect) {
+      q.answered = true;
+      q.correct = true;
       this.synTestScore.correct++;
+      for (const group of q.allFour) {
+        const matched = q.matches[group.core];
+        const isCorrect = group.chain.some(item => item.w === matched);
+        Utils.$$('.syn-pair-left').forEach(el => {
+          if (el.dataset.word === group.core) {
+            el.style.borderColor = isCorrect ? 'var(--dot-done)' : 'var(--dot-key)';
+          }
+        });
+        Utils.$$('.syn-pair-right').forEach(el => {
+          if (el.dataset.word === matched) {
+            el.style.borderColor = isCorrect ? 'var(--dot-done)' : 'var(--dot-key)';
+          }
+        });
+      }
+      setTimeout(() => this.synTestNext(), 1200);
     } else {
-      this.synTestScore.wrong++;
-      this.synTestScore.wrongGroups.push(q.group);
+      if (!q.wrongOnce) {
+        q.wrongOnce = true;
+        this.synTestScore.wrong++;
+        this.synTestScore.wrongGroups.push(q.group);
+      }
+      // Show wrong feedback then reset for retry
+      for (const group of q.allFour) {
+        const matched = q.matches[group.core];
+        const isCorrect = group.chain.some(item => item.w === matched);
+        Utils.$$('.syn-pair-left').forEach(el => {
+          if (el.dataset.word === group.core) {
+            el.style.borderColor = isCorrect ? 'var(--dot-done)' : 'var(--dot-key)';
+          }
+        });
+        Utils.$$('.syn-pair-right').forEach(el => {
+          if (el.dataset.word === matched) {
+            el.style.borderColor = isCorrect ? 'var(--dot-done)' : 'var(--dot-key)';
+          }
+        });
+      }
+      setTimeout(() => {
+        q.matches = {};
+        this._pairLeftSel = null;
+        this.renderView();
+      }, 1500);
     }
-    setTimeout(() => this.synTestNext(), 1500);
   },
 
   synTestAnswer(selected) {
     const q = this.synTestQuestions[this.synTestIdx];
     if (q.answered) return;
-    q.answered = true;
 
     let correctAnswer = '';
     if (q.type === 1) correctAnswer = q.group.core;
     else correctAnswer = q.correctCn;
 
     const isCorrect = selected === correctAnswer;
-    q.correct = isCorrect;
-
-    Utils.$$('.syn-option').forEach(el => {
-      const val = el.dataset.option;
-      if (val === correctAnswer) {
-        el.classList.add('green');
-        el.style.fontWeight = '600';
-      } else if (val === selected && !isCorrect) {
-        el.classList.add('red');
-      }
-      el.style.pointerEvents = 'none';
-    });
 
     if (isCorrect) {
+      q.answered = true;
+      q.correct = true;
       this.synTestScore.correct++;
+      Utils.$$('.syn-option').forEach(el => {
+        const val = el.dataset.option;
+        if (val === correctAnswer) {
+          el.classList.add('green');
+          el.style.fontWeight = '600';
+        }
+        el.style.pointerEvents = 'none';
+      });
+      setTimeout(() => this.synTestNext(), 1200);
     } else {
-      this.synTestScore.wrong++;
-      this.synTestScore.wrongGroups.push(q.group);
+      if (!q.wrongOnce) {
+        q.wrongOnce = true;
+        this.synTestScore.wrong++;
+        this.synTestScore.wrongGroups.push(q.group);
+      }
+      // Mark wrong selection red, keep others clickable for retry
+      Utils.$$('.syn-option').forEach(el => {
+        const val = el.dataset.option;
+        if (val === selected) {
+          el.classList.add('red');
+          el.style.pointerEvents = 'none';
+        }
+      });
+      Utils.toast('答案不正确，请再试一次');
+      setTimeout(() => {
+        // Re-enable remaining options
+        Utils.$$('.syn-option').forEach(el => {
+          if (!el.classList.contains('red')) {
+            el.style.pointerEvents = '';
+          }
+        });
+      }, 800);
     }
-    // Ebbinghaus state is updated in batch at finishSynTest()
-    setTimeout(() => this.synTestNext(), 1200);
   },
 
   synTestNext() {
