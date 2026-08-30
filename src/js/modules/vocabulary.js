@@ -152,9 +152,9 @@ const Vocabulary = {
           <div class="tag-chip ${this.passPhase >= 3 ? 'green' : ''}">第3遍 拼写</div>
         </div>
         <div style="font-family:var(--font-serif);font-size:42px;font-weight:600;color:var(--text-title);margin-bottom:8px">
-          ${word.w} ${Audio.btn(word.w)}
+          ${this.passPhase === 3 ? '? ? ?' : word.w} ${Audio.btn(word.w)}
         </div>
-        <div style="font-size:16px;color:var(--accent-primary);font-style:italic;margin-bottom:16px">${word.phon}</div>
+        <div style="font-size:16px;color:var(--accent-primary);font-style:italic;margin-bottom:16px">${this.passPhase === 3 ? '' : word.phon}</div>
         <div style="display:flex;justify-content:center;gap:6px;margin-bottom:20px">
           <span class="tag-chip orange">${word.pos}</span>
           ${word.tags.map(t => `<span class="tag-chip">${t}</span>`).join('')}

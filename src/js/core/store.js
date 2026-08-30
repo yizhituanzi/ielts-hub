@@ -28,10 +28,6 @@ const Store = {
       // Module 5: Writing
       writingRecords: [],
 
-      // Module 6: Listening
-      listeningProgress: {},
-      listeningErrors: [],
-
       // Focus Timer
       focusSessions: [],
 

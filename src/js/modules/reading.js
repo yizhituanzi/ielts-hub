@@ -543,6 +543,16 @@ const Reading = {
     Store.set('synonyms538', progress);
   },
 
+  // Fisher-Yates proper shuffle
+  shuffle(arr) {
+    const a = [...arr];
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  },
+
   generateSynQuestion(g, studiedPool) {
     // Use studiedPool for distractors (strict isolation — no unseen words)
     const distractorPool = studiedPool && studiedPool.length >= 4 ? studiedPool : Synonyms538.groups;
@@ -550,36 +560,43 @@ const Reading = {
     const qType = chain.length >= 3 ? Math.floor(Math.random() * 4) : Math.floor(Math.random() * 3);
 
     if (qType === 0 && chain.length >= 3) {
-      // Type 1: Multi-blank chain fill
-      const blankCount = Math.min(chain.length - 1, Math.max(1, Math.floor(chain.length / 2)));
-      const available = [];
-      for (let i = 1; i < chain.length; i++) available.push(i);
-      available.sort(() => Math.random() - 0.5);
-      const blankIndices = available.slice(0, blankCount);
+      // Type 1: Multi-blank chain fill — blank ALL non-core words to test the entire chain
+      const blankIndices = [];
+      for (let i = 1; i < chain.length; i++) blankIndices.push(i);
       const blankWords = blankIndices.map(i => chain[i]);
       const displayChain = chain.map((w, i) => blankIndices.includes(i) ? null : w);
       // Distractors from studied pool chain words
       const allChainWords = distractorPool.flatMap(x => x.chain.map(item => item.w));
-      const distractors = allChainWords.filter(w => !chain.includes(w)).sort(() => Math.random() - 0.5).slice(0, blankCount + 3);
-      const options = [...blankWords, ...distractors].sort(() => Math.random() - 0.5);
+      const distractors = allChainWords.filter(w => !chain.includes(w));
+      const need = Math.max(blankWords.length + 3, 5);
+      const options = this.shuffle([...blankWords, ...this.shuffle(distractors).slice(0, need)]);
       return { type: 0, group: g, blankIndices, blankWords, displayChain, options, blanksRemaining: [...blankWords], filledBlanks: [], answered: false, correct: false };
     } else if (qType === 1) {
       // Type 2: Chinese → English — distractors from studied pool
-      const distractors = distractorPool.filter(x => x.id !== g.id).sort(() => Math.random() - 0.5).slice(0, 4);
-      const options = [...distractors.map(d => d.core), g.core].sort(() => Math.random() - 0.5);
+      const distractors = this.shuffle(distractorPool.filter(x => x.id !== g.id)).slice(0, 4);
+      const options = this.shuffle([...distractors.map(d => d.core), g.core]);
       return { type: 1, group: g, correctCn: g.cn, options, answered: false, correct: false };
     } else if (qType === 2) {
       // Type 3: English → Chinese — distractors from studied pool
-      const distractors = distractorPool.filter(x => x.id !== g.id).sort(() => Math.random() - 0.5).slice(0, 4);
-      const options = [...distractors.map(d => d.cn), g.cn].sort(() => Math.random() - 0.5);
+      const distractors = this.shuffle(distractorPool.filter(x => x.id !== g.id)).slice(0, 4);
+      const options = this.shuffle([...distractors.map(d => d.cn), g.cn]);
       return { type: 2, group: g, correctCn: g.cn, options, answered: false, correct: false };
     } else {
       // Type 4: Pair matching — all 4 from studied pool
-      const otherGroups = distractorPool.filter(x => x.id !== g.id).sort(() => Math.random() - 0.5).slice(0, 3);
+      const otherGroups = this.shuffle(distractorPool.filter(x => x.id !== g.id)).slice(0, 3);
       const allFour = [g, ...otherGroups];
       const leftCol = allFour.map(x => x.core);
-      const rightCol = allFour.map(x => x.chain[Math.floor(Math.random() * x.chain.length)]?.w || x.core).sort(() => Math.random() - 0.5);
-      return { type: 3, group: g, allFour, leftCol, rightCol, matches: {}, answered: false, correct: false };
+      // Build right column: pick a chain word for each group, ensuring no duplicates and no overlap with leftCol
+      const usedWords = new Set(leftCol);
+      const rightCol = [];
+      for (const grp of allFour) {
+        const candidates = grp.chain.filter(item => !usedWords.has(item.w));
+        const pool = candidates.length > 0 ? candidates : grp.chain;
+        const pick = pool[Math.floor(Math.random() * pool.length)].w;
+        rightCol.push(pick);
+        usedWords.add(pick);
+      }
+      return { type: 3, group: g, allFour, leftCol, rightCol: this.shuffle(rightCol), matches: {}, answered: false, correct: false };
     }
   },
 
@@ -986,7 +1003,7 @@ const Reading = {
         <div style="display:flex;gap:8px;justify-content:center">
           ${wrongGroups.length > 0 ? `<button class="btn btn-primary" onclick="Reading.retrySynTest()">重考错题 (${wrongGroups.length})</button>` : ''}
           <button class="btn btn-secondary" onclick="Reading.synSubView='testSetup';Reading.renderView()">再考一轮</button>
-          <button class="btn-ghost" onclick="Reading.synSubView='list';Reading.renderView()">返回列表</button>
+          <button class="btn-ghost" onclick="Reading.synSubView='study';Reading.renderView()">返回背词</button>
         </div>
       </div>
     `;
