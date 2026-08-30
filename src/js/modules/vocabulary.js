@@ -16,6 +16,7 @@ const Vocabulary = {
         <div class="pill-tab ${this.view === 'study' ? 'active' : ''}" onclick="Vocabulary.switchView('study')">背词学习</div>
         <div class="pill-tab ${this.view === 'quiz' ? 'active' : ''}" onclick="Vocabulary.switchView('quiz')">巩固测验</div>
         <div class="pill-tab ${this.view === 'review' ? 'active' : ''}" onclick="Vocabulary.switchView('review')">艾宾浩斯复习</div>
+        <div class="pill-tab ${this.view === 'sync' ? 'active' : ''}" onclick="Vocabulary.switchView('sync')">不背同步</div>
       </div>
       <div id="vocab-content"></div>
     `;
@@ -31,7 +32,7 @@ const Vocabulary = {
   switchView(v) {
     this.view = v;
     Utils.$$('.pill-tab', document.getElementById('content')).forEach((el, i) => {
-      const tabs = ['browse', 'study', 'quiz', 'review'];
+      const tabs = ['browse', 'study', 'quiz', 'review', 'sync'];
       el.classList.toggle('active', tabs[i] === v);
     });
     this.renderView();
@@ -43,6 +44,7 @@ const Vocabulary = {
     else if (this.view === 'study') c.innerHTML = this.renderStudy();
     else if (this.view === 'quiz') c.innerHTML = this.renderQuiz();
     else if (this.view === 'review') c.innerHTML = this.renderReview();
+    else if (this.view === 'sync') c.innerHTML = this.renderSync();
   },
 
   // --- Browse ---
@@ -428,5 +430,93 @@ const Vocabulary = {
     Store.set('vocab', vocab);
     this.renderView();
     App.updateMetrics();
+  },
+
+  // --- 不背单词 Sync ---
+  syncChapter: 1,
+  syncSelectAll: false,
+
+  renderSync() {
+    const vocab = Store.get('vocab') || {};
+    const ch = VocabData.getChapter(this.syncChapter);
+    if (!ch) return '<div class="empty-state">章节不存在</div>';
+
+    const words = ch.words;
+    const masteredCount = words.filter(w => vocab[`${ch.id}-${w.w}`]?.mastered).length;
+    const studiedCount = words.filter(w => vocab[`${ch.id}-${w.w}`]?.pass > 0).length;
+
+    return `
+      <div class="bento-card warm" style="margin-bottom:20px">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div>
+            <div class="section-title">不背单词 · 学习数据同步</div>
+            <div class="section-meta">在不背单词App中已学过的单词，在此处批量标记掌握</div>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+        <select class="form-select" style="width:auto" onchange="Vocabulary.syncChapter=parseInt(this.value);Vocabulary.renderView()">
+          ${VocabData.chapters.map(c => `<option value="${c.id}" ${c.id === ch.id ? 'selected' : ''}>Ch.${c.id} ${c.name} (${c.words.length}词)</option>`).join('')}
+        </select>
+        <span class="status-dot active">${studiedCount}/${words.length} 已标记</span>
+        <div style="margin-left:auto;display:flex;gap:8px">
+          <button class="btn btn-secondary" onclick="Vocabulary.syncToggleAll()">全选/取消</button>
+          <button class="btn btn-primary" onclick="Vocabulary.syncConfirm()">标记选中为已掌握</button>
+        </div>
+      </div>
+      <div class="bento-card">
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          ${words.map((w, i) => {
+            const key = `${ch.id}-${w.w}`;
+            const p = vocab[key] || {};
+            const isMastered = p.mastered;
+            return `
+              <div style="display:inline-flex;align-items:center;gap:4px;padding:6px 10px;border:1px solid ${isMastered ? 'var(--dot-done)' : 'var(--border-card)'};border-radius:var(--r-sm);cursor:pointer;background:${isMastered ? 'rgba(111,170,91,0.08)' : 'var(--bg-card-warm)'}" onclick="Vocabulary.syncToggleWord(${i})">
+                <input type="checkbox" id="sync-word-${i}" ${isMastered ? 'checked' : ''} style="margin:0;cursor:pointer" onclick="event.stopPropagation()">
+                <span style="font-family:var(--font-serif);font-size:13px;font-weight:${isMastered ? '600' : '400'};color:${isMastered ? 'var(--dot-done)' : 'var(--text-body)'}">${w.w}</span>
+                <span style="font-size:10px;color:var(--text-muted)">${w.cn}</span>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+  },
+
+  syncToggleWord(idx) {
+    const cb = document.getElementById(`sync-word-${idx}`);
+    cb.checked = !cb.checked;
+  },
+
+  syncToggleAll() {
+    const ch = VocabData.getChapter(this.syncChapter);
+    const checkboxes = ch.words.map((_, i) => document.getElementById(`sync-word-${i}`)).filter(cb => cb);
+    const allChecked = checkboxes.every(cb => cb.checked);
+    checkboxes.forEach(cb => cb.checked = !allChecked);
+  },
+
+  syncConfirm() {
+    const ch = VocabData.getChapter(this.syncChapter);
+    const vocab = Store.get('vocab') || {};
+    let count = 0;
+    ch.words.forEach((w, i) => {
+      const cb = document.getElementById(`sync-word-${i}`);
+      if (cb && cb.checked) {
+        const key = `${ch.id}-${w.w}`;
+        if (!vocab[key]) vocab[key] = { pass: 0, mastered: false, lastReview: Utils.today(), reviewCount: 0, chapter: ch.id };
+        if (!vocab[key].mastered) {
+          vocab[key].pass = 3;
+          vocab[key].mastered = true;
+          vocab[key].lastReview = Utils.today();
+          vocab[key].reviewCount = 0;
+          vocab[key].nextReview = Utils.nextReviewDate(Utils.today(), 0);
+          count++;
+        }
+      }
+    });
+    Store.set('vocab', vocab);
+    App.updateMetrics();
+    Utils.toast(`已标记 ${count} 个单词为已掌握`);
+    this.renderView();
   },
 };
