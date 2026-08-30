@@ -32,11 +32,11 @@ const Resources = {
       <div class="section-title" style="margin-bottom:4px">备考资源导航</div>
       <div class="section-meta" style="margin-bottom:16px">常用备考网站直达</div>
       <div class="bento-grid cols-3" style="margin-bottom:24px">
-        <a href="https://www.bbdc.cn" target="_blank" class="bento-card" style="cursor:pointer;text-decoration:none">
+        <a href="langeasylexis://" class="bento-card" style="cursor:pointer;text-decoration:none">
           <div class="num-badge">№ 01</div>
           <div style="font-family:var(--font-serif);font-size:16px;font-weight:600;color:var(--text-title);margin-top:6px">不背单词</div>
-          <div style="font-size:12px;color:var(--text-muted);margin-top:4px">bbdc.cn · 词汇扩展</div>
-          <div class="arrow-link" style="margin-top:12px">前往 →</div>
+          <div style="font-size:12px;color:var(--text-muted);margin-top:4px">点击打开本地 App</div>
+          <div class="arrow-link" style="margin-top:12px">打开 →</div>
         </a>
         <a href="https://www.idictation.cn/main/book" target="_blank" class="bento-card" style="cursor:pointer;text-decoration:none">
           <div class="num-badge">№ 02</div>
