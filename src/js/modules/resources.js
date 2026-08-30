@@ -32,12 +32,12 @@ const Resources = {
       <div class="section-title" style="margin-bottom:4px">备考资源导航</div>
       <div class="section-meta" style="margin-bottom:16px">常用备考网站直达</div>
       <div class="bento-grid cols-3" style="margin-bottom:24px">
-        <a href="langeasylexis://" class="bento-card" style="cursor:pointer;text-decoration:none">
+        <div class="bento-card" style="cursor:pointer;text-decoration:none" onclick="Resources.openLocalApp('langeasylexis://', 'https://www.bbdc.cn')">
           <div class="num-badge">№ 01</div>
           <div style="font-family:var(--font-serif);font-size:16px;font-weight:600;color:var(--text-title);margin-top:6px">不背单词</div>
           <div style="font-size:12px;color:var(--text-muted);margin-top:4px">点击打开本地 App</div>
           <div class="arrow-link" style="margin-top:12px">打开 →</div>
-        </a>
+        </div>
         <a href="https://www.idictation.cn/main/book" target="_blank" class="bento-card" style="cursor:pointer;text-decoration:none">
           <div class="num-badge">№ 02</div>
           <div style="font-family:var(--font-serif);font-size:16px;font-weight:600;color:var(--text-title);margin-top:6px">爱听写</div>
@@ -97,6 +97,23 @@ const Resources = {
   },
 
   init() {},
+
+  openLocalApp(scheme, fallback) {
+    // Try to open local app via custom URL scheme
+    const start = Date.now();
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    iframe.src = scheme;
+    document.body.appendChild(iframe);
+    setTimeout(() => {
+      document.body.removeChild(iframe);
+      // If less than 1.5s passed and page is still visible, app didn't open
+      if (Date.now() - start < 1500) {
+        Utils.toast('未检测到本地App，正在打开官网...');
+        setTimeout(() => window.open(fallback, '_blank'), 500);
+      }
+    }, 1500);
+  },
 
   saveSetting(key, value) {
     const settings = Store.get('settings') || {};
