@@ -73,6 +73,7 @@ const Store = {
   set(key, value) {
     this.load()[key] = value;
     this.save();
+    CloudSync.scheduleSync();
   },
 
   update(key, fn) {
@@ -127,5 +128,135 @@ const Store = {
     this._cache = this.defaults();
     this.save();
     Utils.toast('数据已重置');
+  },
+};
+
+/* ========================================
+   CloudSync — GitHub Gist auto-sync
+   Token stored in localStorage (never in source code)
+   ======================================== */
+
+const CloudSync = {
+  TOKEN_KEY: 'ielts_hub_gh_token',
+  GIST_ID_KEY: 'ielts_hub_gist_id',
+  AUTO_KEY: 'ielts_hub_auto_sync',
+  GIST_FILENAME: 'ielts-hub-data.json',
+  _syncTimer: null,
+
+  getToken() { return localStorage.getItem(this.TOKEN_KEY) || ''; },
+  setToken(t) { localStorage.setItem(this.TOKEN_KEY, t); },
+  getGistId() { return localStorage.getItem(this.GIST_ID_KEY) || ''; },
+  setGistId(id) { localStorage.setItem(this.GIST_ID_KEY, id); },
+  getAutoSync() { return localStorage.getItem(this.AUTO_KEY) === '1'; },
+  setAutoSync(on) { localStorage.setItem(this.AUTO_KEY, on ? '1' : '0'); },
+
+  isEnabled() { return !!this.getToken(); },
+
+  _headers() {
+    return {
+      'Authorization': `token ${this.getToken()}`,
+      'Accept': 'application/vnd.github.v3+json',
+    };
+  },
+
+  // Upload local data to Gist (create or update)
+  async push() {
+    const token = this.getToken();
+    if (!token) { Utils.toast('请先配置 GitHub Token'); return false; }
+    const data = Store.load();
+    const content = JSON.stringify(data, null, 2);
+    const gistId = this.getGistId();
+
+    try {
+      let res;
+      if (gistId) {
+        // Update existing gist
+        res = await fetch(`https://api.github.com/gists/${gistId}`, {
+          method: 'PATCH',
+          headers: this._headers(),
+          body: JSON.stringify({
+            files: { [this.GIST_FILENAME]: { content } },
+          }),
+        });
+      } else {
+        // Create new gist
+        res = await fetch('https://api.github.com/gists', {
+          method: 'POST',
+          headers: this._headers(),
+          body: JSON.stringify({
+            description: 'IELTS Hub Backup Data',
+            public: false,
+            files: { [this.GIST_FILENAME]: { content } },
+          }),
+        });
+        if (res.ok) {
+          const gist = await res.json();
+          this.setGistId(gist.id);
+        }
+      }
+      if (res.ok) {
+        Utils.toast('☁ 数据已同步到云端');
+        return true;
+      } else {
+        const err = await res.json();
+        Utils.toast('同步失败: ' + (err.message || res.status));
+        return false;
+      }
+    } catch (e) {
+      Utils.toast('网络错误，同步失败');
+      return false;
+    }
+  },
+
+  // Pull data from Gist to local
+  async pull() {
+    const token = this.getToken();
+    if (!token) { Utils.toast('请先配置 GitHub Token'); return false; }
+    const gistId = this.getGistId();
+    if (!gistId) { Utils.toast('尚无云端数据，请先上传'); return false; }
+
+    try {
+      const res = await fetch(`https://api.github.com/gists/${gistId}`, {
+        headers: this._headers(),
+      });
+      if (!res.ok) { Utils.toast('拉取失败: ' + res.status); return false; }
+      const gist = await res.json();
+      const file = gist.files[this.GIST_FILENAME];
+      if (!file) { Utils.toast('云端数据文件不存在'); return false; }
+      const data = JSON.parse(file.content);
+      // Merge with defaults
+      Store._cache = { ...Store.defaults(), ...data };
+      Store._cache.settings = { ...Store.defaults().settings, ...(data.settings || {}) };
+      Store.save();
+      Utils.toast('☁ 已从云端拉取数据');
+      return true;
+    } catch (e) {
+      Utils.toast('拉取失败');
+      return false;
+    }
+  },
+
+  // Check if gist exists and get last updated time
+  async getStatus() {
+    const token = this.getToken();
+    const gistId = this.getGistId();
+    if (!token || !gistId) return null;
+    try {
+      const res = await fetch(`https://api.github.com/gists/${gistId}`, {
+        headers: this._headers(),
+      });
+      if (!res.ok) return null;
+      const gist = await res.json();
+      return { updated: gist.updated_at, url: gist.html_url };
+    } catch (e) {
+      return null;
+    }
+  },
+
+  // Debounced auto-sync trigger
+  scheduleSync() {
+    if (!this.getAutoSync() || !this.isEnabled()) return;
+    clearTimeout(this._syncTimer);
+    this._syncTimer = setTimeout(() => { this.push(); }, 3000);
   },
 };

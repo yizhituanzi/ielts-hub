@@ -11,6 +11,19 @@ const App = {
     Router.init();
     Timer.init();
     this.updateMetrics();
+    this.initCloudSync();
+  },
+
+  async initCloudSync() {
+    if (!CloudSync.isEnabled()) return;
+    if (CloudSync.getAutoSync() && CloudSync.getGistId()) {
+      const localData = Store.get('vocab') || {};
+      const hasLocalData = Object.keys(localData).length > 0;
+      if (!hasLocalData) {
+        await CloudSync.pull();
+        setTimeout(() => location.reload(), 1000);
+      }
+    }
   },
 
   renderShell() {

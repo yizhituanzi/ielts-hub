@@ -12,6 +12,7 @@
 
 - [2026-08-20 15:49:21] IELTS Hub deployed to GitHub Pages: https://caomeiniunai7777.github.io/ielts-hub/ — repo: github.com/caomeiniunai7777/ielts-hub (personal account). Final data: vocabulary.js (3674 words/22 chapters, word list 100% from hefengxian/my-ielts audio index, phonetic 95% + meaning 98% enriched via Free Dictionary API + MyMemory API) + synonyms538.js (376 groups from PDF text layer). Timer UX improved: auto-collapse after Start, close button, click-outside dismiss, completion beep+toast.
 - [2026-08-30 22:07:58] User forked ielts-hub to github.com/yizhituanzi/ielts-hub (origin), upstream is github.com/caomeiniunai7777/ielts-hub. User's own GitHub Pages: https://yizhituanzi.github.io/ielts-hub/. User has NO push access to upstream — can only push to origin. Git credential helper configured as GitHub Desktop's git-credential-manager for CLI push. Working dir: /Users/tuanzi_github_project/ielts-hub.
+- [2026-08-30 22:32:07] User uses 不背单词 (BuBei DanCi) app for vocabulary learning. App's local DB is encrypted (not standard SQLite), cannot be read programmatically. Added "不背同步" tab to IELTS Hub vocabulary module for manual batch-marking words as mastered. 不背单词 app URL scheme: langeasylexis:// (bundle id: cn.com.langeasy.LangEasyLexis). User wants cloud auto-sync via GitHub Gist API — waiting for user to generate a Personal Access Token (gist scope). Not yet implemented.
 
 ### Reference
 

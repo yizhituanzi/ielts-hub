@@ -74,6 +74,35 @@ const Resources = {
         </div>
       </div>
 
+      <!-- Cloud Sync -->
+      <div class="section-title" style="margin:24px 0 4px">云端同步</div>
+      <div class="section-meta" style="margin-bottom:16px">通过 GitHub Gist 自动同步数据，任何设备打开本站数据一致</div>
+      <div class="bento-card" style="max-width:560px" id="cloud-sync-card">
+        <div style="margin-bottom:16px">
+          <label class="form-label">GitHub Token <span style="font-size:11px;color:var(--text-muted)">(仅存本地浏览器，不会上传到代码)</span></label>
+          <div style="display:flex;gap:8px">
+            <input type="password" class="form-input" id="gh-token" placeholder="ghp_xxx..." value="${CloudSync.getToken()}" style="flex:1">
+            <button class="btn btn-secondary" onclick="Resources.saveToken()">保存</button>
+          </div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:4px">
+            生成方式：GitHub Settings → Developer settings → Personal access tokens → 勾选 <code>gist</code>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px">
+          <label style="font-size:13px;color:var(--text-body);display:flex;align-items:center;gap:6px;cursor:pointer">
+            <input type="checkbox" id="auto-sync-toggle" ${CloudSync.getAutoSync() ? 'checked' : ''} onchange="Resources.toggleAutoSync()" style="cursor:pointer">
+            自动同步（数据变动后3秒自动上传）
+          </label>
+          ${CloudSync.getAutoSync() && CloudSync.isEnabled() ? '<span class="status-dot active" style="font-size:11px">已开启</span>' : ''}
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-primary" onclick="Resources.cloudPush()" ${!CloudSync.isEnabled() ? 'disabled' : ''}>上传到云端</button>
+          <button class="btn btn-secondary" onclick="Resources.cloudPull()" ${!CloudSync.isEnabled() ? 'disabled' : ''}>从云端拉取</button>
+          <button class="btn-ghost" onclick="Resources.cloudStatus()" ${!CloudSync.isEnabled() ? 'disabled' : ''}>查看状态</button>
+        </div>
+        <div id="cloud-status" style="margin-top:12px"></div>
+      </div>
+
       <!-- Settings -->
       <div class="section-title" style="margin:24px 0 4px">备考设置</div>
       <div class="section-meta" style="margin-bottom:16px">个性化你的备考参数</div>
@@ -113,6 +142,71 @@ const Resources = {
         setTimeout(() => window.open(fallback, '_blank'), 500);
       }
     }, 1500);
+  },
+
+  // --- Cloud Sync ---
+  saveToken() {
+    const token = document.getElementById('gh-token').value.trim();
+    if (!token) { Utils.toast('请输入Token'); return; }
+    CloudSync.setToken(token);
+    Utils.toast('Token已保存，刷新页面生效');
+    this.render();
+  },
+
+  toggleAutoSync() {
+    const on = document.getElementById('auto-sync-toggle').checked;
+    CloudSync.setAutoSync(on);
+    Utils.toast(on ? '自动同步已开启' : '自动同步已关闭');
+    this.render();
+  },
+
+  async cloudPush() {
+    Utils.toast('正在上传...');
+    const ok = await CloudSync.push();
+    if (ok) this.render();
+  },
+
+  async cloudPull() {
+    App.showModal(`
+      <div class="modal-title">从云端拉取数据</div>
+      <div class="modal-body">
+        <div style="font-size:13px;color:var(--text-body);line-height:1.7">
+          将从云端拉取数据覆盖本地。<br>
+          <strong style="color:#C0392B">本地未同步的数据将被覆盖。</strong>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="App.closeModal()">取消</button>
+        <button class="btn btn-primary" onclick="App.closeModal();Resources.doCloudPull()">确认拉取</button>
+      </div>
+    `);
+  },
+
+  async doCloudPull() {
+    Utils.toast('正在拉取...');
+    const ok = await CloudSync.pull();
+    if (ok) {
+      App.updateMetrics();
+      setTimeout(() => location.reload(), 1000);
+    }
+  },
+
+  async cloudStatus() {
+    const el = document.getElementById('cloud-status');
+    el.innerHTML = '<div style="font-size:12px;color:var(--text-muted)">查询中...</div>';
+    const status = await CloudSync.getStatus();
+    if (status) {
+      const d = new Date(status.updated);
+      el.innerHTML = `
+        <div style="font-size:12px;color:var(--text-body);padding:8px 12px;background:var(--bg-card-warm);border-radius:var(--r-sm)">
+          <span style="color:var(--dot-done)">●</span> 云端已连接<br>
+          最后更新：${Utils.fmtDateDisplay(Utils.fmtDate(d))} ${d.toLocaleTimeString()}<br>
+          Gist ID: <code style="font-size:11px">${CloudSync.getGistId().slice(0,12)}...</code>
+        </div>
+      `;
+    } else {
+      el.innerHTML = `<div style="font-size:12px;color:var(--dot-key)">未找到云端数据，请先上传</div>`;
+    }
   },
 
   saveSetting(key, value) {
