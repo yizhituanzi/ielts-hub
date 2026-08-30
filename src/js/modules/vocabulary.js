@@ -454,6 +454,24 @@ const Vocabulary = {
           </div>
         </div>
       </div>
+
+      <!-- Screenshot OCR -->
+      <div class="bento-card" style="margin-bottom:20px;border:2px dashed var(--accent-orange)">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+          <span class="num-badge">📸</span>
+          <div style="font-family:var(--font-serif);font-size:15px;font-weight:600;color:var(--text-title)">截图自动识别</div>
+        </div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px">
+          截取不背单词App中的学习记录/词表截图，上传后自动识别已学单词并勾选。支持多张截图。
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <input type="file" id="sync-screenshot" accept="image/*" multiple style="display:none" onchange="Vocabulary.syncOCRScreenshots(this.files)">
+          <button class="btn btn-primary" onclick="document.getElementById('sync-screenshot').click()">上传截图识别</button>
+          <span id="ocr-status" style="font-size:12px;color:var(--text-muted)"></span>
+        </div>
+        <div id="ocr-preview" style="margin-top:12px"></div>
+      </div>
+
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
         <select class="form-select" style="width:auto" onchange="Vocabulary.syncChapter=parseInt(this.value);Vocabulary.renderView()">
           ${VocabData.chapters.map(c => `<option value="${c.id}" ${c.id === ch.id ? 'selected' : ''}>Ch.${c.id} ${c.name} (${c.words.length}词)</option>`).join('')}
@@ -481,6 +499,93 @@ const Vocabulary = {
         </div>
       </div>
     `;
+  },
+
+  // --- OCR Screenshot Recognition ---
+  ocrMatchedWords: new Set(),
+
+  async syncOCRScreenshots(files) {
+    if (!files || files.length === 0) return;
+    const statusEl = document.getElementById('ocr-status');
+    const previewEl = document.getElementById('ocr-preview');
+    const allWords = VocabData.allWords().map(w => w.w.toLowerCase());
+
+    statusEl.textContent = '正在加载OCR引擎...';
+    previewEl.innerHTML = '';
+
+    try {
+      const worker = await Tesseract.createWorker(['eng'], 1, {
+        logger: m => {
+          if (m.status === 'recognizing text') {
+            statusEl.textContent = `识别中... ${Math.round(m.progress * 100)}%`;
+          }
+        },
+      });
+
+      let allExtracted = '';
+      for (let i = 0; i < files.length; i++) {
+        statusEl.textContent = `正在识别第 ${i + 1}/${files.length} 张截图...`;
+        const result = await worker.recognize(files[i]);
+        allExtracted += ' ' + result.data.text;
+      }
+      await worker.terminate();
+
+      // Extract English words from OCR text
+      const rawWords = allExtracted.toLowerCase().match(/[a-z][a-z\-']+/g) || [];
+      const extractedSet = new Set(rawWords);
+
+      // Match against ALL vocabulary words (not just current chapter)
+      this.ocrMatchedWords = new Set();
+      let matchedInChapter = 0;
+      let matchedTotal = 0;
+
+      VocabData.chapters.forEach(ch => {
+        ch.words.forEach(w => {
+          const wl = w.w.toLowerCase();
+          if (extractedSet.has(wl)) {
+            this.ocrMatchedWords.add(wl);
+            matchedTotal++;
+            if (ch.id === this.syncChapter) matchedInChapter++;
+          }
+        });
+      });
+
+      // Auto-check matched words in current chapter
+      const ch = VocabData.getChapter(this.syncChapter);
+      ch.words.forEach((w, i) => {
+        if (this.ocrMatchedWords.has(w.w.toLowerCase())) {
+          const cb = document.getElementById(`sync-word-${i}`);
+          if (cb && !cb.checked) cb.checked = true;
+        }
+      });
+
+      statusEl.innerHTML = `✅ 识别完成：共匹配 <strong>${matchedTotal}</strong> 个词汇（当前章节 ${matchedInChapter} 个已自动勾选）`;
+
+      // Show preview thumbnails
+      const thumbs = [];
+      for (let i = 0; i < Math.min(files.length, 4); i++) {
+        const url = URL.createObjectURL(files[i]);
+        thumbs.push(`<img src="${url}" style="max-width:120px;max-height:80px;border-radius:var(--r-sm);border:1px solid var(--border-card)" />`);
+      }
+      previewEl.innerHTML = `<div style="display:flex;gap:6px;flex-wrap:wrap">${thumbs.join('')}</div>`;
+
+      // Auto-switch to the chapter with most matches
+      let bestCh = this.syncChapter;
+      let bestCount = matchedInChapter;
+      VocabData.chapters.forEach(ch => {
+        const cnt = ch.words.filter(w => this.ocrMatchedWords.has(w.w.toLowerCase())).length;
+        if (cnt > bestCount) { bestCount = cnt; bestCh = ch.id; }
+      });
+
+      if (matchedTotal > 0) {
+        Utils.toast(`识别到 ${matchedTotal} 个已学单词，已自动勾选`);
+      } else {
+        Utils.toast('未识别到匹配词汇，请尝试更清晰的截图');
+      }
+    } catch (e) {
+      statusEl.textContent = '识别失败: ' + e.message;
+      console.error('OCR error:', e);
+    }
   },
 
   syncToggleWord(idx) {
