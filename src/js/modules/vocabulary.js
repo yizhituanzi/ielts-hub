@@ -472,6 +472,22 @@ const Vocabulary = {
         <div id="ocr-preview" style="margin-top:12px"></div>
       </div>
 
+      <!-- Script JSON import -->
+      <div class="bento-card" style="margin-bottom:20px;border:2px dashed var(--accent-primary)">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+          <span class="num-badge">⬇</span>
+          <div style="font-family:var(--font-serif);font-size:15px;font-weight:600;color:var(--text-title)">导入提取数据 (bbdc_learned.json)</div>
+        </div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px">
+          在 Mac 上运行 <code>python3 sync_bbdc.py</code> 生成的 JSON 文件，导入后自动把匹配到的已学单词标记为已掌握。
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <input type="file" id="sync-json-file" accept=".json" style="display:none" onchange="Vocabulary.syncImportJSON(this.files[0])">
+          <button class="btn btn-primary" onclick="document.getElementById('sync-json-file').click()">导入 JSON</button>
+          <span id="json-import-status" style="font-size:12px;color:var(--text-muted)"></span>
+        </div>
+      </div>
+
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
         <select class="form-select" style="width:auto" onchange="Vocabulary.syncChapter=parseInt(this.value);Vocabulary.renderView()">
           ${VocabData.chapters.map(c => `<option value="${c.id}" ${c.id === ch.id ? 'selected' : ''}>Ch.${c.id} ${c.name} (${c.words.length}词)</option>`).join('')}
@@ -503,6 +519,52 @@ const Vocabulary = {
 
   // --- OCR Screenshot Recognition ---
   ocrMatchedWords: new Set(),
+
+  syncImportJSON(file) {
+    if (!file) return;
+    const statusEl = document.getElementById('json-import-status');
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target.result);
+        if (!Array.isArray(data.matched_words)) {
+          throw new Error('格式不符');
+        }
+        const learned = new Set(data.matched_words.map(w => w.toLowerCase()));
+        const vocab = Store.get('vocab') || {};
+        const today = Utils.today();
+        let marked = 0, skipped = 0;
+        let matchedInChapter = 0;
+
+        VocabData.chapters.forEach(ch => {
+          ch.words.forEach(w => {
+            if (!learned.has(w.w.toLowerCase())) return;
+            const key = `${ch.id}-${w.w}`;
+            if (!vocab[key]) vocab[key] = { pass: 0, mastered: false, chapter: ch.id };
+            if (vocab[key].mastered) { skipped++; return; }
+            vocab[key].pass = 3;
+            vocab[key].mastered = true;
+            vocab[key].lastReview = today;
+            vocab[key].reviewCount = 0;
+            vocab[key].nextReview = Utils.nextReviewDate(today, 0);
+            marked++;
+            if (ch.id === this.syncChapter) matchedInChapter++;
+          });
+        });
+        Store.set('vocab', vocab);
+        App.updateMetrics();
+
+        const chInfo = data.study_chapters?.length ? ` · 学习计划章节: ${data.study_chapters.join(', ')}` : '';
+        statusEl.innerHTML = `✅ 新标记 <strong>${marked}</strong> 词为已掌握（已存在 ${skipped}）${chInfo}`;
+        Utils.toast(`已同步 ${marked} 个已学单词`);
+        this.renderView();
+      } catch (err) {
+        statusEl.textContent = '导入失败: ' + err.message;
+        Utils.toast('JSON 文件格式错误');
+      }
+    };
+    reader.readAsText(file);
+  },
 
   async syncOCRScreenshots(files) {
     if (!files || files.length === 0) return;
